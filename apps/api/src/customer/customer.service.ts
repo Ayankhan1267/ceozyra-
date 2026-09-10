@@ -16,6 +16,26 @@ export interface CreateCustomerDto {
   notes?: string;
 }
 
+export interface CustomerStats {
+  totalOrders: number;
+  totalSpent: number;
+  avgOrderValue: number;
+  lifetimeValue: number;
+  segment: string;
+  purchaseFrequency: {
+    ordersPerMonth: number;
+    avgDaysBetweenOrders: number | null;
+  };
+  customerSegments: { id: string; name: string; description?: string }[];
+  recentActivity: {
+    id: string;
+    type: string;
+    subject: string;
+    description?: string;
+    createdAt: string;
+  }[];
+}
+
 @Injectable()
 export class CustomerService {
   constructor(private readonly prisma: PrismaService) {}
@@ -49,7 +69,7 @@ export class CustomerService {
     });
     if (!customer) throw new NotFoundException('Customer not found');
 
-    const [orders, orderCount, totalSpent, avgOrderValue] = await Promise.all([
+    const [orders, orderCount, totalSpentAgg, avgOrderValueAgg] = await Promise.all([
       this.prisma.order.findMany({
         where: { customerId: id },
         include: { items: true },
@@ -66,26 +86,96 @@ export class CustomerService {
       }),
     ]);
 
-    const ltv = Number(totalSpent._sum.total) || 0;
-    const aov = Number(avgOrderValue._avg.total) || 0;
+    const ltv = Number(totalSpentAgg._sum.total) || 0;
+    const aov = Number(avgOrderValueAgg._avg.total) || 0;
 
-    // Calculate segment
+    // ── Segment from LTV thresholds ─────────────────────────────────────────────
     let segment = 'new';
     if (ltv > 10000) segment = 'vip';
     else if (ltv > 5000) segment = 'loyal';
     else if (ltv > 1000) segment = 'regular';
     else if (orderCount > 0) segment = 'repeat';
 
+    // ── Purchase frequency ──────────────────────────────────────────────────────
+    const sortedOrders = orders
+      .filter((o) => o.status === 'COMPLETED')
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    let ordersPerMonth = 0;
+    let avgDaysBetweenOrders: number | null = null;
+
+    if (sortedOrders.length >= 2) {
+      const firstDate = new Date(sortedOrders[0].createdAt).getTime();
+      const lastDate = new Date(sortedOrders[sortedOrders.length - 1].createdAt).getTime();
+      const daysSpan = Math.max(1, (lastDate - firstDate) / (1000 * 60 * 60 * 24));
+      const monthsSpan = daysSpan / 30;
+      ordersPerMonth = monthsSpan > 0 ? Number((sortedOrders.length / monthsSpan).toFixed(1)) : 0;
+
+      const gaps: number[] = [];
+      for (let i = 1; i < sortedOrders.length; i++) {
+        const diff =
+          new Date(sortedOrders[i].createdAt).getTime() -
+          new Date(sortedOrders[i - 1].createdAt).getTime();
+        gaps.push(diff / (1000 * 60 * 60 * 24));
+      }
+      avgDaysBetweenOrders = Number(
+        (gaps.reduce((s, g) => s + g, 0) / gaps.length).toFixed(1)
+      );
+    }
+
+    // ── Customer segments (dynamic segments that include this customer) ─────────
+    const matchedSegments = await this.prisma.segment.findMany({
+      where: { customerIds: { has: id } },
+      select: { id: true, name: true, description: true },
+    });
+
+    // ── Recent activity ────────────────────────────────────────────────────────
+    const recentActivity = await this.prisma.activity.findMany({
+      where: { customerId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: {
+        id: true,
+        type: true,
+        subject: true,
+        description: true,
+        createdAt: true,
+      },
+    });
+
+    // ── Linked deals ───────────────────────────────────────────────────────────
+    const deals = await this.prisma.deal.findMany({
+      where: { customerId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: {
+        id: true,
+        title: true,
+        value: true,
+        status: true,
+        stageId: true,
+        pipeline: { select: { id: true, name: true } },
+        createdAt: true,
+      },
+    });
+
     return {
       ...customer,
       orders,
+      deals,
       stats: {
         totalOrders: orderCount,
         totalSpent: ltv,
         avgOrderValue: aov,
         lifetimeValue: ltv,
         segment,
-      },
+        purchaseFrequency: {
+          ordersPerMonth,
+          avgDaysBetweenOrders,
+        },
+        customerSegments: matchedSegments,
+        recentActivity,
+      } satisfies CustomerStats,
     };
   }
 

@@ -10,6 +10,7 @@ import { ProductModule } from './product/product.module';
 import { OrderModule } from './order/order.module';
 import { CartModule } from './cart/cart.module';
 import { CustomerModule } from './customer/customer.module';
+import { CustomerPreferencesModule } from './customer/customer-preferences.module';
 import { StoresModule } from './stores/stores.module';
 import { CategoriesModule } from './categories/categories.module';
 import { CollectionsModule } from './collections/collections.module';
@@ -29,6 +30,7 @@ import { DatabaseModule } from './database/database.module';
 import { RedisModule } from './redis/redis.module';
 import { QueueModule } from './queue/queue.module';
 import { EventModule } from './event/event.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 
 import { LeadsModule } from './leads/leads.module';
 import { CompaniesModule } from './companies/companies.module';
@@ -46,6 +48,13 @@ import { AutomationModule } from './automation/automation.module';
 import { DiscountsModule } from './discounts/discounts.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
+import { AutopilotModule } from './autopilot/autopilot.module';
+import { RadarModule } from './radar/radar.module';
+import { ExperimentsModule } from './experiments/experiments.module';
+import { SmsModule } from './sms/sms.module';
+import { IntegrationsModule } from './integrations/integrations.module';
+import { RecommendationsModule } from './recommendations/recommendations.module';
+import { SalesModule } from './sales/sales.module';
 
 @Module({
   imports: [
@@ -67,10 +76,12 @@ import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
     OrderModule,
     CartModule,
     CustomerModule,
+    CustomerPreferencesModule,
     CommissionModule,
     AgentModule,
     AnalyticsModule,
     CommunicationModule,
+    WhatsAppModule,
     FinanceModule,
     StoresModule,
     CategoriesModule,
@@ -96,6 +107,13 @@ import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
     DiscountsModule,
     SuppliersModule,
     PurchaseOrdersModule,
+    AutopilotModule,
+    RadarModule,
+    ExperimentsModule,
+    SmsModule,
+    IntegrationsModule,
+    RecommendationsModule,
+    SalesModule,
   ],
   controllers: [],
   providers: [],

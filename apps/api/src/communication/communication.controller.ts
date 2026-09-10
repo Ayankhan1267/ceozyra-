@@ -3,7 +3,7 @@
  */
 
 import { Controller, Post, Body, UseGuards } from '@nestjs/common';
-import { CommunicationService, type SendEmailDto, type SendWhatsAppDto, type SendSmsDto } from './communication.service';
+import { CommunicationService, type SendWhatsAppDto, type SendSmsDto, type SendWhatsAppTemplateInput, type SendWhatsAppMediaInput } from './communication.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 
@@ -13,14 +13,26 @@ export class CommunicationController {
 
   @Post('email')
   @UseGuards(AuthGuard, RolesGuard)
-  sendEmail(@Body() dto: SendEmailDto) {
-    return this.communicationService.sendEmail(dto);
+  sendEmail(@Body() body: { to: string; subject: string; html: string; tenantId: string }) {
+    return this.communicationService.sendEmail(body as any);
   }
 
   @Post('whatsapp')
   @UseGuards(AuthGuard, RolesGuard)
   sendWhatsApp(@Body() dto: SendWhatsAppDto) {
     return this.communicationService.sendWhatsApp(dto);
+  }
+
+  @Post('whatsapp/template')
+  @UseGuards(AuthGuard, RolesGuard)
+  sendWhatsAppTemplate(@Body() dto: SendWhatsAppTemplateInput) {
+    return this.communicationService.sendWhatsAppTemplate(dto);
+  }
+
+  @Post('whatsapp/media')
+  @UseGuards(AuthGuard, RolesGuard)
+  sendWhatsAppMedia(@Body() dto: SendWhatsAppMediaInput) {
+    return this.communicationService.sendWhatsAppMedia(dto);
   }
 
   @Post('sms')
