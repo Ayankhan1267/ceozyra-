@@ -1,0 +1,126 @@
+"use strict";
+/**
+ * ZYRA — Config Package
+ * Environment configuration management
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.clearRequestId = exports.setRequestId = exports.createLogger = exports.ZyraLogger = exports.assertEnvValid = exports.validateEnv = void 0;
+exports.getConfig = getConfig;
+exports.config = config;
+exports.isProduction = isProduction;
+exports.isQA = isQA;
+exports.isDevelopment = isDevelopment;
+function getEnv(key, fallback = '') {
+    const value = process.env[key];
+    return value !== undefined ? value : fallback;
+}
+function getEnvOrThrow(key) {
+    const value = process.env[key];
+    if (!value) {
+        throw new Error(`Missing required environment variable: ${key}`);
+    }
+    return value;
+}
+function getConfig() {
+    const env = getEnv('APP_ENV', 'development');
+    const nodeEnv = getEnv('NODE_ENV', 'development');
+    return {
+        env,
+        nodeEnv,
+        database: {
+            url: getEnv('DATABASE_URL'),
+            urlQA: getEnv('DATABASE_URL_QA'),
+            urlProd: getEnv('DATABASE_URL_PROD'),
+        },
+        redis: {
+            url: getEnv('REDIS_URL', 'redis://localhost:6379'),
+            password: getEnv('REDIS_PASSWORD'),
+        },
+        jwt: {
+            secret: getEnvOrThrow('JWT_SECRET'),
+            refreshSecret: getEnvOrThrow('JWT_REFRESH_SECRET'),
+            expiry: getEnv('JWT_EXPIRY', '15m'),
+            refreshExpiry: getEnv('JWT_REFRESH_EXPIRY', '7d'),
+        },
+        api: {
+            port: parseInt(getEnv('API_PORT', '4000'), 10),
+            url: getEnv('API_URL', 'http://localhost:4000'),
+        },
+        web: {
+            appUrl: getEnv('NEXT_PUBLIC_APP_URL', 'http://localhost:3000'),
+            adminUrl: getEnv('NEXT_PUBLIC_ADMIN_URL', 'http://localhost:3003'),
+        },
+        ai: {
+            serviceUrl: getEnv('AI_SERVICE_URL', 'http://localhost:8000'),
+            apiKey: getEnv('AI_API_KEY'),
+        },
+        storage: {
+            endpoint: getEnv('S3_ENDPOINT'),
+            bucket: getEnv('S3_BUCKET', 'zyra-uploads'),
+            accessKey: getEnv('S3_ACCESS_KEY'),
+            secretKey: getEnv('S3_SECRET_KEY'),
+            region: getEnv('S3_REGION', 'us-east-1'),
+        },
+        email: {
+            smtpHost: getEnv('SMTP_HOST'),
+            smtpPort: getEnv('SMTP_PORT'),
+            smtpUser: getEnv('SMTP_USER'),
+            smtpPass: getEnv('SMTP_PASS'),
+            from: getEnv('EMAIL_FROM', 'noreply@ceozyra.com'),
+        },
+        whatsapp: {
+            apiUrl: getEnv('WHATSAPP_API_URL'),
+            apiToken: getEnv('WHATSAPP_API_TOKEN'),
+            phoneNumberId: getEnv('WHATSAPP_PHONE_NUMBER_ID'),
+        },
+        sms: {
+            provider: getEnv('SMS_PROVIDER'),
+            apiKey: getEnv('SMS_API_KEY'),
+            senderId: getEnv('SMS_SENDER_ID'),
+        },
+        payments: {
+            razorpayKeyId: getEnv('RAZORPAY_KEY_ID'),
+            razorpayKeySecret: getEnv('RAZORPAY_KEY_SECRET'),
+            stripeSecretKey: getEnv('STRIPE_SECRET_KEY'),
+            stripeWebhookSecret: getEnv('STRIPE_WEBHOOK_SECRET'),
+        },
+        oauth: {
+            googleClientId: getEnv('GOOGLE_CLIENT_ID'),
+            googleClientSecret: getEnv('GOOGLE_CLIENT_SECRET'),
+        },
+        meta: {
+            appId: getEnv('META_APP_ID'),
+            appSecret: getEnv('META_APP_SECRET'),
+            accessToken: getEnv('META_ACCESS_TOKEN'),
+        },
+        observability: {
+            sentryDsn: getEnv('SENTRY_DSN'),
+            otelEndpoint: getEnv('OTEL_EXPORTER_OTLP_ENDPOINT'),
+            logLevel: getEnv('LOG_LEVEL', 'info'),
+        },
+    };
+}
+var env_validation_1 = require("./env.validation");
+Object.defineProperty(exports, "validateEnv", { enumerable: true, get: function () { return env_validation_1.validateEnv; } });
+Object.defineProperty(exports, "assertEnvValid", { enumerable: true, get: function () { return env_validation_1.assertEnvValid; } });
+let cachedConfig = null;
+function config() {
+    if (!cachedConfig) {
+        cachedConfig = getConfig();
+    }
+    return cachedConfig;
+}
+function isProduction() {
+    return getConfig().env === 'production';
+}
+function isQA() {
+    return getConfig().env === 'qa';
+}
+function isDevelopment() {
+    return getConfig().env === 'development';
+}
+var logger_1 = require("./logger");
+Object.defineProperty(exports, "ZyraLogger", { enumerable: true, get: function () { return logger_1.ZyraLogger; } });
+Object.defineProperty(exports, "createLogger", { enumerable: true, get: function () { return logger_1.createLogger; } });
+Object.defineProperty(exports, "setRequestId", { enumerable: true, get: function () { return logger_1.setRequestId; } });
+Object.defineProperty(exports, "clearRequestId", { enumerable: true, get: function () { return logger_1.clearRequestId; } });

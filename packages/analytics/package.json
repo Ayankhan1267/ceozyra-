@@ -1,0 +1,23 @@
+{
+  "name": "@zyra/analytics",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo skip",
+    "clean": "rm -rf dist node_modules .turbo"
+  },
+  "dependencies": {
+    "@zyra/types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0"
+  }
+}

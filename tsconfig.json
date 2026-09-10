@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "incremental": true,
+    "paths": {
+      "@zyra/ui": ["./packages/ui/src/index.ts"],
+      "@zyra/types": ["./packages/types/src/index.ts"],
+      "@zyra/config": ["./packages/config/src/index.ts"],
+      "@zyra/auth": ["./packages/auth/src/index.ts"],
+      "@zyra/database": ["./packages/database/src/index.ts"],
+      "@zyra/events": ["./packages/events/src/index.ts"],
+      "@zyra/integrations": ["./packages/integrations/src/index.ts"],
+      "@zyra/analytics": ["./packages/analytics/src/index.ts"],
+      "@zyra/security": ["./packages/security/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "dist", ".next", ".turbo"]
+}

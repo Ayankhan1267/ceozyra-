@@ -1,0 +1,60 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+dist
+build
+.next
+out
+.turbo
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.production
+.env.qa
+
+# Secrets
+*.pem
+*.key
+secrets/
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+coverage
+.jest
+.playwright
+
+# Docker
+docker-compose.override.yml
+
+# Database
+*.db
+prisma/migrations/*.sql
+!prisma/migrations/migration_lock.toml
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Misc
+.cache
+tmp
+temp
+*.tsbuildinfo
