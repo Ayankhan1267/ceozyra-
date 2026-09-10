@@ -7,11 +7,10 @@ import { DatabaseModule } from '../database/database.module';
 import { EventModule } from '../event/event.module';
 import { ProductService } from './product.service';
 import { ProductController } from './product.controller';
-import { DiscountsController } from './discounts.controller';
 
 @Module({
   imports: [DatabaseModule, EventModule],
-  controllers: [ProductController, DiscountsController],
+  controllers: [ProductController],
   providers: [ProductService],
   exports: [ProductService],
 })

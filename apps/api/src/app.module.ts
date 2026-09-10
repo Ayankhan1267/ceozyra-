@@ -15,12 +15,14 @@ import { CategoriesModule } from './categories/categories.module';
 import { CollectionsModule } from './collections/collections.module';
 import { DomainsModule } from './domains/domains.module';
 import { PaymentsModule } from './payments/payments.module';
+import { RefundsModule } from './refunds/refunds.module';
 import { CommissionModule } from './commission/commission.module';
 import { AgentModule } from './agent/agent.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CommunicationModule } from './communication/communication.module';
 import { FinanceModule } from './finance/finance.module';
 import { EmailModule } from './email/email.module';
+import { CheckoutModule } from './checkout/checkout.module';
 import { HealthModule } from './health/health.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { DatabaseModule } from './database/database.module';
@@ -41,6 +43,9 @@ import { MessagesModule } from './messages/messages.module';
 import { TemplatesModule } from './templates/templates.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { AutomationModule } from './automation/automation.module';
+import { DiscountsModule } from './discounts/discounts.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
+import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 
 @Module({
   imports: [
@@ -72,6 +77,8 @@ import { AutomationModule } from './automation/automation.module';
     CollectionsModule,
     DomainsModule,
     PaymentsModule,
+    RefundsModule,
+    CheckoutModule,
     InventoryModule,
     LeadsModule,
     CompaniesModule,
@@ -86,6 +93,9 @@ import { AutomationModule } from './automation/automation.module';
     TemplatesModule,
     CampaignsModule,
     AutomationModule,
+    DiscountsModule,
+    SuppliersModule,
+    PurchaseOrdersModule,
   ],
   controllers: [],
   providers: [],

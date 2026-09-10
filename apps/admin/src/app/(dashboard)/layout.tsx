@@ -6,6 +6,8 @@ const sidebarLinks = [
   { href: '/dashboard/approvals', label: 'Approvals' },
   { href: '/dashboard/orders', label: 'Orders' },
   { href: '/dashboard/products', label: 'Products' },
+  { href: '/dashboard/suppliers', label: 'Suppliers' },
+  { href: '/dashboard/purchase-orders', label: 'Purchase Orders' },
   { href: '/dashboard/customers', label: 'Customers' },
   { href: '/dashboard/finance', label: 'Finance' },
   { href: '/dashboard/reports', label: 'Reports' },

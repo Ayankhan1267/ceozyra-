@@ -23,5 +23,7 @@ export interface PaymentAdapter {
     reason: string;
   }): Promise<PaymentResult>;
 
+  getRefundStatus(refundId: string): Promise<string>;
+
   verifyWebhook(payload: unknown, signature: string, secret: string): boolean;
 }

@@ -3,7 +3,7 @@
  * Payment processing, provider adapters, refunds, webhooks.
  */
 
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import type { Prisma, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { EventBusService } from '../event/event.service';
@@ -51,9 +51,13 @@ export interface PaymentFilterDto {
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventService: EventBusService,
+    private readonly razorpayAdapter: RazorpayAdapter,
+    private readonly stripeAdapter: StripeAdapter,
   ) {}
 
   // ── Payments ────────────────────────────────────────────────────────────────
@@ -159,22 +163,33 @@ export class PaymentsService {
       });
     }
 
-    // Process through adapter
+    // Mark as PROCESSING while SDK call is in flight
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: 'PROCESSING' },
+    });
+
+    // Process through adapter with retry + error handling
     const adapter = this._getAdapter(dto.method);
+
     try {
-      const result = await adapter.createPayment({
-        amount: dto.amount,
-        currency: dto.currency ?? 'USD',
-        orderId: dto.orderId,
-        customerId: dto.customerId,
-      });
+      const result = await this._withRetry(() =>
+        adapter.createPayment({
+          amount: dto.amount,
+          currency: dto.currency ?? 'USD',
+          orderId: dto.orderId,
+          customerId: dto.customerId,
+        }),
+      );
+
+      const success = result.success ?? false;
 
       await this.prisma.payment.update({
         where: { id: payment.id },
         data: {
-          status: result.success ? 'SUCCEEDED' : 'FAILED',
+          status: success ? 'SUCCEEDED' : 'FAILED',
           transactionId: result.transactionId,
-          paidAt: result.success ? new Date() : undefined,
+          paidAt: success ? new Date() : undefined,
           metadata: JSON.parse(JSON.stringify({
             ...(payment.metadata ? (payment.metadata as Record<string, unknown>) : {}),
             ...(result.metadata ? (result.metadata as Record<string, unknown>) : {}),
@@ -185,19 +200,183 @@ export class PaymentsService {
       this.eventService.emit('payment.processed', {
         paymentId: payment.id,
         orderId: dto.orderId,
-        success: result.success,
+        success,
         provider: dto.method,
         tenantId: dto.tenantId,
       });
 
-      return { ...payment, success: result.success, transactionId: result.transactionId };
+      return { ...payment, success, transactionId: result.transactionId };
     } catch (error) {
+      const errorMessage = (error as Error).message;
+
+      // Avoid updating PENDING payments that are already FAILED by a webhook
       await this.prisma.payment.update({
         where: { id: payment.id },
         data: { status: 'FAILED' },
       });
-      throw new BadRequestException(`Payment processing failed: ${(error as Error).message}`);
+
+      this.logger.error(
+        `Payment processing failed for payment ${payment.id}: ${errorMessage}`
+      );
+
+      throw new BadRequestException(
+        `Payment processing failed: ${errorMessage}`
+      );
     }
+  }
+
+  // ── Webhook Processing ──────────────────────────────────────────────────────
+
+  /**
+   * Process an incoming webhook event from a payment provider.
+   * Updates payment/refund records and emits internal events.
+   */
+  async handleWebhookEvent(
+    provider: string,
+    eventType: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    this.logger.log(
+      `Processing ${provider} webhook: ${eventType}`
+    );
+
+    switch (provider) {
+      case 'razorpay':
+        await this._handleRazorpayWebhook(eventType, payload);
+        break;
+      case 'stripe':
+        await this._handleStripeWebhook(eventType, payload);
+        break;
+      default:
+        this.logger.warn(`Unknown webhook provider: ${provider}`);
+    }
+  }
+
+  private async _handleRazorpayWebhook(
+    eventType: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    const entity = payload['entity'] as Record<string, unknown> | undefined;
+    if (!entity) return;
+
+    switch (eventType) {
+      case 'payment.captured':
+        await this._updatePaymentStatus(entity['id'] as string, 'SUCCEEDED', entity['id'] as string);
+        break;
+      case 'payment.failed':
+        await this._updatePaymentStatus(entity['id'] as string, 'FAILED', entity['id'] as string);
+        break;
+      case 'refund.processed':
+        await this._updateRefundStatus(entity['id'] as string, 'SUCCEEDED');
+        break;
+      case 'refund.failed':
+        await this._updateRefundStatus(entity['id'] as string, 'FAILED');
+        break;
+      default:
+        this.logger.debug(`Unhandled Razorpay event: ${eventType}`);
+    }
+  }
+
+  private async _handleStripeWebhook(
+    eventType: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    const dataObject = (payload['data'] as { object?: Record<string, unknown> })?.object;
+    if (!dataObject) return;
+
+    switch (eventType) {
+      case 'payment_intent.succeeded':
+        await this._updatePaymentStatus(
+          dataObject['id'] as string,
+          'SUCCEEDED',
+          dataObject['id'] as string,
+        );
+        break;
+      case 'payment_intent.payment_failed':
+        await this._updatePaymentStatus(
+          dataObject['id'] as string,
+          'FAILED',
+          dataObject['id'] as string,
+        );
+        break;
+      case 'charge.refunded':
+        await this._updatePaymentStatus(
+          dataObject['payment_intent'] as string,
+          'REFUNDED',
+          dataObject['id'] as string,
+        );
+        break;
+      default:
+        this.logger.debug(`Unhandled Stripe event: ${eventType}`);
+    }
+  }
+
+  private async _updatePaymentStatus(
+    transactionId: string,
+    status: PaymentStatus,
+    providerTransactionId: string,
+  ): Promise<void> {
+    const payment = await this.prisma.payment.findFirst({
+      where: { transactionId },
+      include: { order: true },
+    });
+
+    if (!payment) {
+      // Try to match by the Razorpay/Stripe order ID in metadata
+      this.logger.warn(
+        `Payment not found for transactionId ${transactionId} — webhook may need manual reconciliation`
+      );
+      return;
+    }
+
+    const updated = await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status,
+        ...(status === 'SUCCEEDED' ? { paidAt: new Date() } : {}),
+      },
+      include: { order: true },
+    });
+
+    this.eventService.emit('payment.status_changed', {
+      paymentId: updated.id,
+      orderId: updated.orderId,
+      status,
+      tenantId: updated.tenantId,
+      source: 'webhook',
+    });
+  }
+
+  private async _updateRefundStatus(
+    refundTransactionId: string,
+    status: 'SUCCEEDED' | 'FAILED',
+  ): Promise<void> {
+    const refund = await this.prisma.refund.findFirst({
+      where: { transactionId: refundTransactionId },
+    });
+
+    if (!refund) {
+      this.logger.warn(
+        `Refund not found for transactionId ${refundTransactionId}`
+      );
+      return;
+    }
+
+    const updated = await this.prisma.refund.update({
+      where: { id: refund.id },
+      data: {
+        status,
+        ...(status === 'SUCCEEDED' ? { refundedAt: new Date() } : {}),
+      },
+    });
+
+    this.eventService.emit('refund.status_changed', {
+      refundId: updated.id,
+      paymentId: updated.paymentId,
+      orderId: updated.orderId,
+      status,
+      tenantId: updated.tenantId,
+    });
   }
 
   // ── Refunds ─────────────────────────────────────────────────────────────────
@@ -228,11 +407,13 @@ export class PaymentsService {
 
     const adapter = this._getAdapter(payment.method);
     try {
-      const result = await adapter.createRefund({
-        paymentId: dto.paymentId,
-        amount: dto.amount,
-        reason: dto.reason,
-      });
+      const result = await this._withRetry(() =>
+        adapter.createRefund({
+          paymentId: dto.paymentId,
+          amount: dto.amount,
+          reason: dto.reason,
+        }),
+      );
 
       const refund = await this.prisma.refund.create({
         data: {
@@ -263,16 +444,67 @@ export class PaymentsService {
     }
   }
 
+  // ── Retry Helper ────────────────────────────────────────────────────────────
+
+  /**
+   * Retry an async operation with exponential backoff.
+   * Does NOT retry on 4xx errors from payment providers.
+   */
+  private async _withRetry<T>(
+    fn: () => Promise<T>,
+    maxAttempts = 3,
+    baseDelayMs = 500,
+  ): Promise<T> {
+    let lastError: Error = new Error('Unknown');
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error as Error;
+
+        // Don't retry on client errors (4xx) or payment failures
+        const message = lastError.message.toLowerCase();
+        if (
+          message.includes('400') ||
+          message.includes('401') ||
+          message.includes('403') ||
+          message.includes('404') ||
+          message.includes('card_declined') ||
+          message.includes('insufficient')
+        ) {
+          this.logger.warn(
+            `Non-retryable error (attempt ${attempt}): ${lastError.message}`
+          );
+          throw lastError;
+        }
+
+        if (attempt < maxAttempts) {
+          const delay = baseDelayMs * Math.pow(2, attempt - 1);
+          this.logger.warn(
+            `Attempt ${attempt} failed, retrying in ${delay}ms: ${lastError.message}`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    this.logger.error(
+      `All ${maxAttempts} attempts failed: ${(lastError as Error).message}`
+    );
+    throw lastError!;
+  }
+
   // ── Private ─────────────────────────────────────────────────────────────────
 
   private _getAdapter(method: string) {
     switch (method) {
       case 'razorpay':
-        return new RazorpayAdapter();
+        return this.razorpayAdapter;
       case 'stripe':
-        return new StripeAdapter();
+        return this.stripeAdapter;
       default:
-        return new RazorpayAdapter();
+        return this.razorpayAdapter;
     }
   }
 }

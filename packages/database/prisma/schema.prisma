@@ -347,6 +347,7 @@ model Tenant {
   lowStockAlerts        LowStockAlert[]
   stores                Store[]
   themes                Theme[]
+  discounts             Discount[]
 }
 
 model User {
@@ -822,6 +823,7 @@ model Customer {
   carts            Cart[]
   Activity         Activity[]
   Deal             Deal[]
+  couponUsages     CouponUsage[]
 
   @@map("customers")
 }
@@ -2265,4 +2267,64 @@ model Tag {
   @@unique([tenantId, name])
   @@index([tenantId])
   @@map("tags")
+}
+
+// ── Discounts & Coupons ────────────────────────────────────────────────────────
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FREE_SHIPPING
+}
+
+enum DiscountAppliesTo {
+  ALL
+  CATEGORY
+  PRODUCT
+  COLLECTION
+}
+
+model Discount {
+  id              String            @id @default(cuid())
+  tenantId        String
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name            String
+  code            String?           @db.VarChar(255)
+  type            DiscountType
+  value           Decimal           @db.Decimal(10, 2)
+  minOrderAmount  Decimal?          @default(0) @db.Decimal(10, 2)
+  maxUses         Int?
+  usedCount       Int               @default(0)
+  startDate       DateTime?
+  endDate         DateTime?
+  appliesTo       DiscountAppliesTo @default(ALL)
+  applicableIds   Json?
+  isActive        Boolean           @default(true)
+  metadata        Json?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  usages          CouponUsage[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([tenantId, code])
+  @@map("discounts")
+}
+
+model CouponUsage {
+  id         String    @id @default(cuid())
+  tenantId   String
+  discountId String
+  discount   Discount  @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  orderId    String
+  usedAt     DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([discountId])
+  @@index([customerId])
+  @@index([orderId])
+  @@unique([discountId, customerId, orderId])
+  @@map("coupon_usages")
 }

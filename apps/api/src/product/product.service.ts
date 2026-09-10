@@ -382,10 +382,10 @@ export class ProductService {
   }
 
   // ── Discounts & Coupons ─────────────────────────────────────────────────────
-  // Stubs — Discount / Coupon models not yet in the Prisma schema.
+  // Delegated to DiscountsService (apps/api/src/discounts/discounts.service.ts)
 
   async createDiscount(data: CreateDiscountDto) {
-    throw new BadRequestException('Discount model not yet implemented in schema');
+    throw new BadRequestException('Use POST /discounts endpoint');
   }
 
   async listDiscounts() {
@@ -393,7 +393,7 @@ export class ProductService {
   }
 
   async createCoupon(_data: Record<string, unknown>) {
-    throw new BadRequestException('Coupon model not yet implemented in schema');
+    throw new BadRequestException('Use POST /discounts endpoint');
   }
 
   async listCoupons() {
@@ -404,14 +404,12 @@ export class ProductService {
     return { valid: false, discount: 0 };
   }
 
-  // ── Controller-facing wrappers ──────────────────────────────────────────────
-
   async getDiscounts(tenantId: string, _storefrontId?: string) {
     return [];
   }
 
   async updateDiscount(_id: string, data: UpdateDiscountDto) {
-    throw new BadRequestException('Discount model not yet implemented in schema');
+    throw new BadRequestException('Use PATCH /discounts/:id endpoint');
   }
 
   async deleteDiscount(_id: string) {
@@ -423,14 +421,12 @@ export class ProductService {
   }
 
   async updateCoupon(_id: string, _data: Record<string, unknown>) {
-    throw new BadRequestException('Coupon model not yet implemented in schema');
+    throw new BadRequestException('Use PATCH /discounts/:id endpoint');
   }
 
   async deleteCoupon(_id: string) {
     return { success: true };
   }
-
-  // ── Controller-facing wrappers ──────────────────────────────────────────────
 
   async findByStorefront(storefrontId: string, params: { page?: number; limit?: number; categoryId?: string }) {
     const sf = await this.prisma.storefront.findUnique({

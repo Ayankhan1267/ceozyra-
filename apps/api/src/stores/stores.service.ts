@@ -1,12 +1,20 @@
 /**
  * ZYRA — Stores Service
- * Storefront CRUD, page management, theme management.
+ * Storefront CRUD, page management, theme management, page section builder.
  */
 
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { type Prisma, type PageType } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
-import { EventBusService } from '../event/event.service';
+import {
+  CreateSectionDto,
+  UpdateSectionDto,
+  ReorderSectionsDto,
+  DuplicatePageDto,
+  PageSectionResponse,
+  PagePreviewResponse,
+  DuplicatePageResponse,
+} from './dto/page-section.dto';
 
 // ─── DTOs ────────────────────────────────────────────────────────────────────
 
@@ -186,9 +194,192 @@ export class StoresService {
     await this.findPage(storeId, pageId);
     return this.prisma.page.update({
       where: { id: pageId },
-      data: { isPublished: publish },
+      data: {
+        isPublished: publish,
+        publishedAt: publish ? new Date() : null,
+      },
       include: { storefront: true },
     });
+  }
+
+  // ── Page Sections ────────────────────────────────────────────────────────────
+
+  async addPageSection(pageId: string, storeId: string, dto: CreateSectionDto): Promise<PageSectionResponse> {
+    await this.findPage(storeId, pageId);
+
+    // Determine the next order value
+    const lastSection = await this.prisma.pageSection.findFirst({
+      where: { pageId },
+      orderBy: { order: 'desc' },
+    });
+    const nextOrder = (lastSection?.order ?? -1) + 1;
+    const order = dto.order ?? nextOrder;
+
+    const section = await this.prisma.pageSection.create({
+      data: {
+        pageId,
+        type: dto.type,
+        content: dto.content ? JSON.parse(JSON.stringify(dto.content)) : undefined,
+        order,
+      },
+    });
+
+    return mapSection(section);
+  }
+
+  async updatePageSection(
+    pageId: string,
+    sectionId: string,
+    storeId: string,
+    dto: UpdateSectionDto,
+  ): Promise<PageSectionResponse> {
+    await this.findPage(storeId, pageId);
+
+    const existing = await this.prisma.pageSection.findFirst({
+      where: { id: sectionId, pageId },
+    });
+    if (!existing) throw new NotFoundException('Section not found');
+
+    const data: Record<string, unknown> = {};
+    if (dto.type !== undefined) data.type = dto.type;
+    if (dto.content !== undefined) data.content = JSON.parse(JSON.stringify(dto.content));
+    if (dto.order !== undefined) data.order = dto.order;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+
+    const updated = await this.prisma.pageSection.update({
+      where: { id: sectionId },
+      data,
+    });
+
+    return mapSection(updated);
+  }
+
+  async removePageSection(pageId: string, sectionId: string, storeId: string): Promise<void> {
+    await this.findPage(storeId, pageId);
+
+    const existing = await this.prisma.pageSection.findFirst({
+      where: { id: sectionId, pageId },
+    });
+    if (!existing) throw new NotFoundException('Section not found');
+
+    await this.prisma.pageSection.delete({ where: { id: sectionId } });
+  }
+
+  async reorderPageSections(
+    pageId: string,
+    storeId: string,
+    dto: ReorderSectionsDto,
+  ): Promise<PageSectionResponse[]> {
+    await this.findPage(storeId, pageId);
+
+    // Validate all sections belong to this page
+    const existingSections = await this.prisma.pageSection.findMany({
+      where: { pageId },
+      select: { id: true },
+    });
+    const existingIds = new Set(existingSections.map((s) => s.id));
+    const invalidIds = dto.sectionIds.filter((id) => !existingIds.has(id));
+    if (invalidIds.length > 0) {
+      throw new NotFoundException(`Sections not found on this page: ${invalidIds.join(', ')}`);
+    }
+
+    // Update orders in a transaction
+    await this.prisma.$transaction(
+      dto.sectionIds.map((id, index) =>
+        this.prisma.pageSection.update({
+          where: { id },
+          data: { order: index },
+        })
+      )
+    );
+
+    return this.getPageSections(pageId);
+  }
+
+  async getPageSections(pageId: string): Promise<PageSectionResponse[]> {
+    const sections = await this.prisma.pageSection.findMany({
+      where: { pageId },
+      orderBy: { order: 'asc' },
+    });
+    return sections.map(mapSection);
+  }
+
+  async duplicatePage(pageId: string, storeId: string, dto: DuplicatePageDto): Promise<DuplicatePageResponse> {
+    const sourcePage = await this.findPage(storeId, pageId);
+
+    // Build unique slug
+    const baseSlug = dto.slug || `${sourcePage.slug}-copy`;
+    const timestamp = Date.now().toString(36);
+    const uniqueSlug = `${baseSlug}-${timestamp}`;
+
+    // Fetch all source sections
+    const sections = await this.prisma.pageSection.findMany({
+      where: { pageId },
+      orderBy: { order: 'asc' },
+    });
+
+    // Create new page with sections in a transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      const newPage = await tx.page.create({
+        data: {
+          storefrontId: sourcePage.storefrontId,
+          tenantId: sourcePage.tenantId,
+          title: dto.title || `${sourcePage.title} (Copy)`,
+          slug: uniqueSlug,
+          type: sourcePage.type,
+          schema: sourcePage.schema ? JSON.parse(JSON.stringify(sourcePage.schema)) : undefined,
+          seoTitle: sourcePage.seoTitle,
+          seoDescription: sourcePage.seoDescription,
+          isPublished: false,
+          sections: {
+            create: sections.map((s) => ({
+              type: s.type,
+              content: s.content ? JSON.parse(JSON.stringify(s.content)) : undefined,
+              order: s.order,
+              isActive: s.isActive,
+            })),
+          },
+        },
+        include: {
+          sections: {
+            orderBy: { order: 'asc' },
+          },
+        },
+      });
+
+      return newPage;
+    });
+
+    return {
+      id: result.id,
+      title: result.title,
+      slug: result.slug,
+      type: result.type,
+      isPublished: result.isPublished,
+      sections: result.sections.map(mapSection),
+    };
+  }
+
+  async getPagePreview(pageId: string, storeId: string): Promise<PagePreviewResponse> {
+    const page = await this.findPage(storeId, pageId);
+
+    const sections = await this.prisma.pageSection.findMany({
+      where: { pageId },
+      orderBy: { order: 'asc' },
+    });
+
+    return {
+      id: page.id,
+      title: page.title,
+      slug: page.slug,
+      type: page.type,
+      status: page.status,
+      isPublished: page.isPublished,
+      storefrontId: page.storefrontId,
+      seoTitle: page.seoTitle,
+      seoDescription: page.seoDescription,
+      sections: sections.map(mapSection),
+    };
   }
 
   // ── Themes ──────────────────────────────────────────────────────────────────
@@ -237,4 +428,28 @@ export class StoresService {
       },
     });
   }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function mapSection(section: {
+  id: string;
+  pageId: string;
+  type: string;
+  content: Record<string, unknown> | null;
+  order: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}): PageSectionResponse {
+  return {
+    id: section.id,
+    pageId: section.pageId,
+    type: section.type,
+    content: section.content ?? null,
+    order: section.order,
+    isActive: section.isActive,
+    createdAt: section.createdAt.toISOString(),
+    updatedAt: section.updatedAt.toISOString(),
+  };
 }

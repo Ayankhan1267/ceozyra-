@@ -24,10 +24,18 @@ import {
   UpdatePageDto,
   CreateThemeDto,
 } from './stores.service';
+import {
+  CreateSectionDto,
+  UpdateSectionDto,
+  ReorderSectionsDto,
+  DuplicatePageDto,
+} from './dto/page-section.dto';
 
 @Controller('stores')
 export class StoresController {
   constructor(private readonly storesService: StoresService) {}
+
+  // ── Storefront CRUD ──────────────────────────────────────────────────────────
 
   @Get()
   @UseGuards(AuthGuard, RolesGuard)
@@ -67,6 +75,8 @@ export class StoresController {
     return this.storesService.delete(id);
   }
 
+  // ── Pages ────────────────────────────────────────────────────────────────────
+
   @Get(':storeId/pages')
   findPages(@Param('storeId') storeId: string) {
     return this.storesService.findPages(storeId);
@@ -82,7 +92,11 @@ export class StoresController {
   @Patch('pages/:pageId')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('OWNER', 'ADMIN', 'MANAGER')
-  updatePage(@Param('storeId') storeId: string, @Param('pageId') pageId: string, @Body() dto: UpdatePageDto) {
+  updatePage(
+    @Param('storeId') storeId: string,
+    @Param('pageId') pageId: string,
+    @Body() dto: UpdatePageDto,
+  ) {
     return this.storesService.updatePage(storeId, pageId, dto);
   }
 
@@ -96,6 +110,84 @@ export class StoresController {
   ) {
     return this.storesService.publishPage(storeId, pageId, body.published);
   }
+
+  // ── Page Sections ────────────────────────────────────────────────────────────
+
+  @Post('pages/:pageId/sections')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'MANAGER')
+  addSection(
+    @Param('storeId') storeId: string,
+    @Param('pageId') pageId: string,
+    @Body() dto: CreateSectionDto,
+  ) {
+    return this.storesService.addPageSection(pageId, storeId, dto);
+  }
+
+  @Patch('pages/:pageId/sections/:sectionId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'MANAGER')
+  updateSection(
+    @Param('storeId') storeId: string,
+    @Param('pageId') pageId: string,
+    @Param('sectionId') sectionId: string,
+    @Body() dto: UpdateSectionDto,
+  ) {
+    return this.storesService.updatePageSection(pageId, sectionId, storeId, dto);
+  }
+
+  @Delete('pages/:pageId/sections/:sectionId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'MANAGER')
+  removeSection(
+    @Param('storeId') storeId: string,
+    @Param('pageId') pageId: string,
+    @Param('sectionId') sectionId: string,
+  ) {
+    return this.storesService.removePageSection(pageId, sectionId, storeId);
+  }
+
+  @Patch('pages/:pageId/sections/reorder')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'MANAGER')
+  reorderSections(
+    @Param('storeId') storeId: string,
+    @Param('pageId') pageId: string,
+    @Body() dto: ReorderSectionsDto,
+  ) {
+    return this.storesService.reorderPageSections(pageId, storeId, dto);
+  }
+
+  @Get('pages/:pageId/sections')
+  getSections(
+    @Param('storeId') storeId: string,
+    @Param('pageId') pageId: string,
+  ) {
+    return this.storesService.getPageSections(pageId);
+  }
+
+  // ── Duplicate & Preview ──────────────────────────────────────────────────────
+
+  @Post('pages/:pageId/duplicate')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'MANAGER')
+  duplicatePage(
+    @Param('storeId') storeId: string,
+    @Param('pageId') pageId: string,
+    @Body() dto: DuplicatePageDto,
+  ) {
+    return this.storesService.duplicatePage(pageId, storeId, dto);
+  }
+
+  @Get('pages/:pageId/preview')
+  getPagePreview(
+    @Param('storeId') storeId: string,
+    @Param('pageId') pageId: string,
+  ) {
+    return this.storesService.getPagePreview(pageId, storeId);
+  }
+
+  // ── Themes ──────────────────────────────────────────────────────────────────
 
   @Get(':storeId/themes')
   findThemes(@Param('storeId') storeId: string) {

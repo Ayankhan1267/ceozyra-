@@ -18,10 +18,13 @@ import { StripeAdapter } from './adapters/stripe.adapter';
 // Controller
 import { PaymentsController } from './payments.controller';
 
+// Webhooks
+import { WebhooksService } from './webhooks.service';
+
 @Module({
   imports: [DatabaseModule, EventModule, OrderModule],
   controllers: [PaymentsController],
-  providers: [PaymentsService, RazorpayAdapter, StripeAdapter],
-  exports: [PaymentsService],
+  providers: [PaymentsService, WebhooksService, RazorpayAdapter, StripeAdapter],
+  exports: [PaymentsService, WebhooksService],
 })
 export class PaymentsModule {}
